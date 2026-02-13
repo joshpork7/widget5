@@ -5,7 +5,7 @@
 <style>
 body {
   margin: 0;
-  background: #f2f2f2;
+  background: #ececec;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -19,36 +19,16 @@ body {
   display: none;
 }
 
-#controls {
-  position: absolute;
-  top: 12px;
-  right: 16px;
+#label {
   font-size: 12px;
   opacity: 0.6;
-}
-
-button {
-  border: none;
-  background: none;
-  font-size: 12px;
-  margin-left: 8px;
-  cursor: pointer;
-}
-
-button.active {
-  font-weight: 600;
-}
-
-#modeLabel {
-  font-size: 12px;
+  margin-bottom: 8px;
   letter-spacing: 1px;
   text-transform: uppercase;
-  opacity: 0.5;
-  margin-bottom: 8px;
 }
 
 #timer {
-  font-size: 64px;
+  font-size: 72px;
   font-weight: 600;
   letter-spacing: 2px;
 }
@@ -56,14 +36,8 @@ button.active {
 </head>
 <body>
 
-<div id="controls">
-  <button id="toggleBtn">ON</button>
-  <button id="longBtn" class="active">Long</button>
-  <button id="shortBtn">Short</button>
-</div>
-
 <div id="container">
-  <div id="modeLabel"></div>
+  <div id="label"></div>
   <div id="timer"></div>
 </div>
 
@@ -78,41 +52,14 @@ const CALENDAR_IDS = [
   "bbbe6f9d786f8f96691c564fb0dd93023c32efc375165a49fa5f43084ce3a945@group.calendar.google.com"
 ];
 
-let isOn = true;
-let mode = "long";
 let eventStart = null;
 let eventEnd = null;
-
-document.getElementById("toggleBtn").onclick = () => {
-  isOn = !isOn;
-  document.getElementById("toggleBtn").textContent = isOn ? "ON" : "OFF";
-  updateVisibility();
-};
-
-document.getElementById("longBtn").onclick = () => {
-  mode = "long";
-  setModeUI();
-};
-
-document.getElementById("shortBtn").onclick = () => {
-  mode = "short";
-  setModeUI();
-};
-
-function setModeUI() {
-  document.getElementById("longBtn").classList.toggle("active", mode==="long");
-  document.getElementById("shortBtn").classList.toggle("active", mode==="short");
-}
-
-function updateVisibility() {
-  document.getElementById("container").style.display =
-    (isOn && eventStart && eventEnd) ? "block" : "none";
-}
+let mode = "short"; // auto-adjusted later
 
 async function fetchActiveEvent() {
   const now = new Date();
-  const timeMin = now.toISOString();
-  const timeMax = new Date(now.getTime() + 12*60*60*1000).toISOString();
+  const timeMin = new Date(now.getTime() - 1 * 60 * 60 * 1000).toISOString();
+  const timeMax = new Date(now.getTime() + 12 * 60 * 60 * 1000).toISOString();
 
   let events = [];
 
@@ -122,7 +69,9 @@ async function fetchActiveEvent() {
       const res = await fetch(url);
       const data = await res.json();
       if (data.items) events = events.concat(data.items);
-    } catch {}
+    } catch (err) {
+      console.log("Calendar fetch error:", err);
+    }
   }
 
   const nowTime = new Date();
@@ -137,77 +86,72 @@ async function fetchActiveEvent() {
   if (active) {
     eventStart = new Date(active.start.dateTime);
     eventEnd = new Date(active.end.dateTime);
+
+    const durationMinutes = (eventEnd - eventStart) / 60000;
+
+    // Auto mode selection
+    mode = durationMinutes >= 120 ? "long" : "short";
+
+    document.getElementById("container").style.display = "block";
   } else {
     eventStart = null;
     eventEnd = null;
+    document.getElementById("container").style.display = "none";
   }
-
-  updateVisibility();
 }
 
 function updateTimer() {
-  if (!isOn || !eventStart || !eventEnd) return;
+  if (!eventStart || !eventEnd) return;
 
   const now = new Date();
-  const totalMinutes = (eventEnd - eventStart)/60000;
-  const elapsed = (now - eventStart)/60000;
+  if (now < eventStart || now > eventEnd) return;
 
-  if (elapsed < 0 || now > eventEnd) return;
+  const totalMinutes = (eventEnd - eventStart) / 60000;
+  const elapsedMinutes = (now - eventStart) / 60000;
 
-  let activeLen, breakLen, minDuration;
+  let activeLen, breakLen;
 
   if (mode === "long") {
-    if (totalMinutes < 120) {
-      document.getElementById("container").style.display = "none";
-      return;
-    }
     activeLen = 54;
     breakLen = 6;
-    minDuration = 120;
   } else {
     activeLen = 25;
     breakLen = 5;
-    minDuration = 0;
   }
 
-  let cycleLen = activeLen + breakLen;
-  let remainder = totalMinutes % cycleLen;
-  let cyclePosition = elapsed % cycleLen;
+  const cycleLen = activeLen + breakLen;
+  const fullCycles = Math.floor(totalMinutes / cycleLen);
+  const remainder = totalMinutes - fullCycles * cycleLen;
 
-  let label = "";
-  let remainingSeconds = 0;
+  let isInRemainder = elapsedMinutes >= fullCycles * cycleLen;
 
-  if (mode === "long" && totalMinutes >= 120) {
+  let label;
+  let remainingSeconds;
 
-    if (totalMinutes - remainder >= elapsed) {
-      if (cyclePosition < activeLen) {
-        label = "ACTIVE";
-        remainingSeconds = (activeLen - cyclePosition)*60;
-      } else {
-        label = "BREAK";
-        remainingSeconds = (cycleLen - cyclePosition)*60;
-      }
-    } else {
-      label = "ACTIVE";
-      remainingSeconds = (totalMinutes - elapsed)*60;
-    }
-
+  if (isInRemainder) {
+    // Remainder runs fully ACTIVE
+    label = "ACTIVE";
+    remainingSeconds = (totalMinutes - elapsedMinutes) * 60;
   } else {
+    const cyclePosition = elapsedMinutes % cycleLen;
+
     if (cyclePosition < activeLen) {
       label = "ACTIVE";
-      remainingSeconds = (activeLen - cyclePosition)*60;
+      remainingSeconds = (activeLen - cyclePosition) * 60;
     } else {
       label = "BREAK";
-      remainingSeconds = (cycleLen - cyclePosition)*60;
+      remainingSeconds = (cycleLen - cyclePosition) * 60;
     }
   }
 
-  if (remainingSeconds < 0) remainingSeconds = 0;
+  remainingSeconds = Math.max(0, remainingSeconds);
 
-  const m = String(Math.floor(remainingSeconds/60)).padStart(2,"0");
-  const s = String(Math.floor(remainingSeconds%60)).padStart(2,"0");
+  const m = String(Math.floor(remainingSeconds / 60)).padStart(2, "0");
+  const s = String(Math.floor(remainingSeconds % 60)).padStart(2, "0");
 
-  document.getElementById("modeLabel").textContent = label;
+  document.getElementById("label").textContent =
+    label + " • " + (mode === "long" ? "LONG MODE" : "SHORT MODE");
+
   document.getElementById("timer").textContent = `${m}:${s}`;
 }
 
