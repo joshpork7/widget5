@@ -80,12 +80,13 @@ const CALENDAR_IDS = [
 
 let eventStart = null;
 let eventEnd = null;
+let currentEventId = null;
 
 let isOn = true;
 let manualMode = null; // null = auto
 let mode = "short";
 
-// ------------------ CONTROLS ------------------
+// ------------------ BUTTONS ------------------
 
 document.getElementById("toggleBtn").onclick = () => {
   isOn = !isOn;
@@ -95,17 +96,21 @@ document.getElementById("toggleBtn").onclick = () => {
 
 document.getElementById("shortBtn").onclick = () => {
   manualMode = "short";
+  mode = "short";
   updateModeButtons();
+  updateTimer(); // instant change
 };
 
 document.getElementById("longBtn").onclick = () => {
   manualMode = "long";
+  mode = "long";
   updateModeButtons();
+  updateTimer(); // instant change
 };
 
 function updateModeButtons() {
-  document.getElementById("shortBtn").classList.toggle("active", manualMode === "short");
-  document.getElementById("longBtn").classList.toggle("active", manualMode === "long");
+  document.getElementById("shortBtn").classList.toggle("active", mode === "short");
+  document.getElementById("longBtn").classList.toggle("active", mode === "long");
 }
 
 // ------------------ FETCH EVENT ------------------
@@ -138,22 +143,32 @@ async function fetchActiveEvent() {
   });
 
   if (active) {
+    const newEventId = active.id;
+
+    // If new event starts → reset manual override
+    if (newEventId !== currentEventId) {
+      manualMode = null;
+      currentEventId = newEventId;
+    }
+
     eventStart = new Date(active.start.dateTime);
     eventEnd = new Date(active.end.dateTime);
 
     const durationMinutes = (eventEnd - eventStart) / 60000;
 
-    // Auto mode unless manually overridden
     if (!manualMode) {
       mode = durationMinutes >= 120 ? "long" : "short";
     } else {
       mode = manualMode;
     }
 
+    updateModeButtons();
     updateVisibility();
   } else {
     eventStart = null;
     eventEnd = null;
+    currentEventId = null;
+    manualMode = null;
     document.getElementById("container").style.display = "none";
   }
 }
@@ -177,19 +192,17 @@ function updateTimer() {
   const totalMinutes = (eventEnd - eventStart) / 60000;
   const elapsedMinutes = (now - eventStart) / 60000;
 
-  let activeLen = mode === "long" ? 54 : 25;
-  let breakLen = mode === "long" ? 6 : 5;
+  const activeLen = mode === "long" ? 54 : 25;
+  const breakLen = mode === "long" ? 6 : 5;
 
   const cycleLen = activeLen + breakLen;
   const fullCycles = Math.floor(totalMinutes / cycleLen);
   const remainder = totalMinutes - fullCycles * cycleLen;
 
-  let isInRemainder = elapsedMinutes >= fullCycles * cycleLen;
-
   let label;
   let remainingSeconds;
 
-  if (isInRemainder) {
+  if (elapsedMinutes >= fullCycles * cycleLen) {
     label = "ACTIVE";
     remainingSeconds = (totalMinutes - elapsedMinutes) * 60;
   } else {
@@ -218,7 +231,7 @@ function updateTimer() {
 // ------------------ INIT ------------------
 
 fetchActiveEvent();
-setInterval(fetchActiveEvent, 60000);
+setInterval(fetchActiveEvent, 30000);
 setInterval(updateTimer, 1000);
 </script>
 
