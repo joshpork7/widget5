@@ -5,7 +5,7 @@
 <style>
 body {
   margin: 0;
-  background: #ececec;
+  background: #f2f2f2;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -13,6 +13,26 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, sans-serif;
   text-align: center;
   color: #111;
+}
+
+#controls {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+button {
+  border: none;
+  background: none;
+  font-size: 12px;
+  margin-left: 10px;
+  cursor: pointer;
+}
+
+button.active {
+  font-weight: 600;
 }
 
 #container {
@@ -36,6 +56,12 @@ body {
 </head>
 <body>
 
+<div id="controls">
+  <button id="toggleBtn">ON</button>
+  <button id="shortBtn">Short</button>
+  <button id="longBtn">Long</button>
+</div>
+
 <div id="container">
   <div id="label"></div>
   <div id="timer"></div>
@@ -54,7 +80,35 @@ const CALENDAR_IDS = [
 
 let eventStart = null;
 let eventEnd = null;
-let mode = "short"; // auto-adjusted later
+
+let isOn = true;
+let manualMode = null; // null = auto
+let mode = "short";
+
+// ------------------ CONTROLS ------------------
+
+document.getElementById("toggleBtn").onclick = () => {
+  isOn = !isOn;
+  document.getElementById("toggleBtn").textContent = isOn ? "ON" : "OFF";
+  updateVisibility();
+};
+
+document.getElementById("shortBtn").onclick = () => {
+  manualMode = "short";
+  updateModeButtons();
+};
+
+document.getElementById("longBtn").onclick = () => {
+  manualMode = "long";
+  updateModeButtons();
+};
+
+function updateModeButtons() {
+  document.getElementById("shortBtn").classList.toggle("active", manualMode === "short");
+  document.getElementById("longBtn").classList.toggle("active", manualMode === "long");
+}
+
+// ------------------ FETCH EVENT ------------------
 
 async function fetchActiveEvent() {
   const now = new Date();
@@ -89,10 +143,14 @@ async function fetchActiveEvent() {
 
     const durationMinutes = (eventEnd - eventStart) / 60000;
 
-    // Auto mode selection
-    mode = durationMinutes >= 120 ? "long" : "short";
+    // Auto mode unless manually overridden
+    if (!manualMode) {
+      mode = durationMinutes >= 120 ? "long" : "short";
+    } else {
+      mode = manualMode;
+    }
 
-    document.getElementById("container").style.display = "block";
+    updateVisibility();
   } else {
     eventStart = null;
     eventEnd = null;
@@ -100,8 +158,18 @@ async function fetchActiveEvent() {
   }
 }
 
+function updateVisibility() {
+  if (isOn && eventStart && eventEnd) {
+    document.getElementById("container").style.display = "block";
+  } else {
+    document.getElementById("container").style.display = "none";
+  }
+}
+
+// ------------------ TIMER ------------------
+
 function updateTimer() {
-  if (!eventStart || !eventEnd) return;
+  if (!isOn || !eventStart || !eventEnd) return;
 
   const now = new Date();
   if (now < eventStart || now > eventEnd) return;
@@ -109,15 +177,8 @@ function updateTimer() {
   const totalMinutes = (eventEnd - eventStart) / 60000;
   const elapsedMinutes = (now - eventStart) / 60000;
 
-  let activeLen, breakLen;
-
-  if (mode === "long") {
-    activeLen = 54;
-    breakLen = 6;
-  } else {
-    activeLen = 25;
-    breakLen = 5;
-  }
+  let activeLen = mode === "long" ? 54 : 25;
+  let breakLen = mode === "long" ? 6 : 5;
 
   const cycleLen = activeLen + breakLen;
   const fullCycles = Math.floor(totalMinutes / cycleLen);
@@ -129,7 +190,6 @@ function updateTimer() {
   let remainingSeconds;
 
   if (isInRemainder) {
-    // Remainder runs fully ACTIVE
     label = "ACTIVE";
     remainingSeconds = (totalMinutes - elapsedMinutes) * 60;
   } else {
@@ -150,10 +210,12 @@ function updateTimer() {
   const s = String(Math.floor(remainingSeconds % 60)).padStart(2, "0");
 
   document.getElementById("label").textContent =
-    label + " • " + (mode === "long" ? "LONG MODE" : "SHORT MODE");
+    label + " • " + (mode === "long" ? "LONG" : "SHORT");
 
   document.getElementById("timer").textContent = `${m}:${s}`;
 }
+
+// ------------------ INIT ------------------
 
 fetchActiveEvent();
 setInterval(fetchActiveEvent, 60000);
