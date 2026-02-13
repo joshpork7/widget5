@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+body {
+  margin: 0;
+  background: #f2f2f2;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  text-align: center;
+  color: #111;
+}
+
+#container {
+  display: none;
+}
+
+#controls {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  font-size: 12px;
+  opacity: 0.6;
+}
+
+button {
+  border: none;
+  background: none;
+  font-size: 12px;
+  margin-left: 8px;
+  cursor: pointer;
+}
+
+button.active {
+  font-weight: 600;
+}
+
+#modeLabel {
+  font-size: 12px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  opacity: 0.5;
+  margin-bottom: 8px;
+}
+
+#timer {
+  font-size: 64px;
+  font-weight: 600;
+  letter-spacing: 2px;
+}
+</style>
+</head>
+<body>
+
+<div id="controls">
+  <button id="toggleBtn">ON</button>
+  <button id="longBtn" class="active">Long</button>
+  <button id="shortBtn">Short</button>
+</div>
+
+<div id="container">
+  <div id="modeLabel"></div>
+  <div id="timer"></div>
+</div>
+
+<script>
+const API_KEY = "AIzaSyBulpufS7w0xT0QjHIlg75Em8TXRAJfNaA";
+const CALENDAR_IDS = [
+  "7ef01f5b92746221176b2e75d5cda2d674f3242c9cb0d3ef99550ae39fca5cc0@group.calendar.google.com",
+  "8e3b8a47e00c54eebac457f3829b01610f2039f05cc6998bfd0334200e80db4d@group.calendar.google.com",
+  "bc9094e317604a97236ecd12ed509529b89c702ab5dddf7142aed493f4fd87b5@group.calendar.google.com",
+  "f98a845d2d487246693d4bc740c763e8869338b01cf0ee3711c21436200e344d@group.calendar.google.com",
+  "4eb78cc9497bd1e1826c06cd2e5fd3ed95e3b416787b519973a7228b7a6712de@group.calendar.google.com",
+  "bbbe6f9d786f8f96691c564fb0dd93023c32efc375165a49fa5f43084ce3a945@group.calendar.google.com"
+];
+
+let isOn = true;
+let mode = "long";
+let eventStart = null;
+let eventEnd = null;
+
+document.getElementById("toggleBtn").onclick = () => {
+  isOn = !isOn;
+  document.getElementById("toggleBtn").textContent = isOn ? "ON" : "OFF";
+  updateVisibility();
+};
+
+document.getElementById("longBtn").onclick = () => {
+  mode = "long";
+  setModeUI();
+};
+
+document.getElementById("shortBtn").onclick = () => {
+  mode = "short";
+  setModeUI();
+};
+
+function setModeUI() {
+  document.getElementById("longBtn").classList.toggle("active", mode==="long");
+  document.getElementById("shortBtn").classList.toggle("active", mode==="short");
+}
+
+function updateVisibility() {
+  document.getElementById("container").style.display =
+    (isOn && eventStart && eventEnd) ? "block" : "none";
+}
+
+async function fetchActiveEvent() {
+  const now = new Date();
+  const timeMin = now.toISOString();
+  const timeMax = new Date(now.getTime() + 12*60*60*1000).toISOString();
+
+  let events = [];
+
+  for (const id of CALENDAR_IDS) {
+    const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(id)}/events?key=${API_KEY}&timeMin=${timeMin}&timeMax=${timeMax}&singleEvents=true&orderBy=startTime`;
+    try {
+      const res = await fetch(url);
+      const data = await res.json();
+      if (data.items) events = events.concat(data.items);
+    } catch {}
+  }
+
+  const nowTime = new Date();
+
+  const active = events.find(e => {
+    if (!e.start.dateTime || !e.end.dateTime) return false;
+    const s = new Date(e.start.dateTime);
+    const en = new Date(e.end.dateTime);
+    return s <= nowTime && nowTime <= en;
+  });
+
+  if (active) {
+    eventStart = new Date(active.start.dateTime);
+    eventEnd = new Date(active.end.dateTime);
+  } else {
+    eventStart = null;
+    eventEnd = null;
+  }
+
+  updateVisibility();
+}
+
+function updateTimer() {
+  if (!isOn || !eventStart || !eventEnd) return;
+
+  const now = new Date();
+  const totalMinutes = (eventEnd - eventStart)/60000;
+  const elapsed = (now - eventStart)/60000;
+
+  if (elapsed < 0 || now > eventEnd) return;
+
+  let activeLen, breakLen, minDuration;
+
+  if (mode === "long") {
+    if (totalMinutes < 120) {
+      document.getElementById("container").style.display = "none";
+      return;
+    }
+    activeLen = 54;
+    breakLen = 6;
+    minDuration = 120;
+  } else {
+    activeLen = 25;
+    breakLen = 5;
+    minDuration = 0;
+  }
+
+  let cycleLen = activeLen + breakLen;
+  let remainder = totalMinutes % cycleLen;
+  let cyclePosition = elapsed % cycleLen;
+
+  let label = "";
+  let remainingSeconds = 0;
+
+  if (mode === "long" && totalMinutes >= 120) {
+
+    if (totalMinutes - remainder >= elapsed) {
+      if (cyclePosition < activeLen) {
+        label = "ACTIVE";
+        remainingSeconds = (activeLen - cyclePosition)*60;
+      } else {
+        label = "BREAK";
+        remainingSeconds = (cycleLen - cyclePosition)*60;
+      }
+    } else {
+      label = "ACTIVE";
+      remainingSeconds = (totalMinutes - elapsed)*60;
+    }
+
+  } else {
+    if (cyclePosition < activeLen) {
+      label = "ACTIVE";
+      remainingSeconds = (activeLen - cyclePosition)*60;
+    } else {
+      label = "BREAK";
+      remainingSeconds = (cycleLen - cyclePosition)*60;
+    }
+  }
+
+  if (remainingSeconds < 0) remainingSeconds = 0;
+
+  const m = String(Math.floor(remainingSeconds/60)).padStart(2,"0");
+  const s = String(Math.floor(remainingSeconds%60)).padStart(2,"0");
+
+  document.getElementById("modeLabel").textContent = label;
+  document.getElementById("timer").textContent = `${m}:${s}`;
+}
+
+fetchActiveEvent();
+setInterval(fetchActiveEvent, 60000);
+setInterval(updateTimer, 1000);
+</script>
+
+</body>
+</html>
