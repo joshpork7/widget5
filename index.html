@@ -75,6 +75,7 @@ button.active {
   <button id="shortBtn">short</button>
   <button id="longBtn">long</button>
   <button id="endBreakBtn" style="display:none;">end</button>
+  <button id="displayToggleBtn">ON</button>
 </div>
 
 <div id="container">
@@ -95,6 +96,7 @@ const CALENDAR_IDS = [
 
 let eventStart = null;
 let eventEnd = null;
+let displayOn = true;  
 
 let systemMode = "automatic"; // automatic | manual
 let autoSplitMode = "short";
@@ -146,6 +148,12 @@ document.getElementById("longBtn").onclick = () => {
 
 document.getElementById("endBreakBtn").onclick = () => {
   endManualBreak();
+};
+
+document.getElementById("displayToggleBtn").onclick = () => {
+  displayOn = !displayOn;
+  document.getElementById("displayToggleBtn").textContent = displayOn ? "ON" : "OFF";
+  updateVisibility();
 };
 
 // ------------------ MANUAL BREAK ------------------
@@ -204,6 +212,11 @@ async function fetchActiveEvent() {
 }
 
 function updateVisibility() {
+  if (!displayOn) {
+    document.getElementById("container").style.display = "none";
+    return;
+  }
+
   if (systemMode === "automatic") {
     document.getElementById("container").style.display =
       eventStart && eventEnd ? "block" : "none";
