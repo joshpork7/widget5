@@ -103,18 +103,35 @@ let isOn = true;
 let manualMode = null;
 let mode = "short";
 
-let manualBreakEnd = null;
+// Manual break state
+let manualBreakStart = null;
+let manualBreakDuration = 0; // in ms
+let accumulatedBreakTime = 0; // total break offset applied
 
 // ------------------ BREAK BUTTONS ------------------
 
 function triggerManualBreak(minutes) {
   if (!eventStart || !eventEnd) return;
 
-  const now = new Date();
-  manualBreakEnd = new Date(now.getTime() + minutes * 60000);
+  manualBreakStart = new Date();
+  manualBreakDuration = minutes * 60000;
 
-  // Shift eventStart forward so cycles resume properly
-  eventStart = new Date(eventStart.getTime() + minutes * 60000);
+  document.getElementById("endBreakBtn").style.display = "inline";
+}
+
+function endManualBreak() {
+  if (!manualBreakStart) return;
+
+  const now = new Date();
+  const elapsed = now - manualBreakStart;
+
+  // Add only actual break time used
+  accumulatedBreakTime += Math.min(elapsed, manualBreakDuration);
+
+  manualBreakStart = null;
+  manualBreakDuration = 0;
+
+  document.getElementById("endBreakBtn").style.display = "none";
 }
 
 document.getElementById("manualShortBreak").onclick = () => {
@@ -123,6 +140,10 @@ document.getElementById("manualShortBreak").onclick = () => {
 
 document.getElementById("manualLongBreak").onclick = () => {
   triggerManualBreak(10);
+};
+
+document.getElementById("endBreakBtn").onclick = () => {
+  endManualBreak();
 };
 
 // ------------------ MODE BUTTONS ------------------
@@ -184,7 +205,9 @@ async function fetchActiveEvent() {
 
     if (newEventId !== currentEventId) {
       manualMode = null;
-      manualBreakEnd = null;
+      manualBreakStart = null;
+      manualBreakDuration = 0;
+      accumulatedBreakTime = 0;
       currentEventId = newEventId;
     }
 
@@ -205,7 +228,8 @@ async function fetchActiveEvent() {
     eventStart = null;
     eventEnd = null;
     currentEventId = null;
-    manualBreakEnd = null;
+    manualBreakStart = null;
+    accumulatedBreakTime = 0;
     document.getElementById("container").style.display = "none";
   }
 }
@@ -226,34 +250,38 @@ function updateTimer() {
   const now = new Date();
   if (now < eventStart || now > eventEnd) return;
 
-  // ---- MANUAL BREAK OVERRIDE ----
-  if (manualBreakEnd && now < manualBreakEnd) {
-    const remaining = Math.max(0, (manualBreakEnd - now) / 1000);
+  // ----- ACTIVE MANUAL BREAK -----
+  if (manualBreakStart) {
+    const elapsed = now - manualBreakStart;
 
-    const m = String(Math.floor(remaining / 60)).padStart(2, "0");
-    const s = String(Math.floor(remaining % 60)).padStart(2, "0");
+    if (elapsed < manualBreakDuration) {
+      const remaining = manualBreakDuration - elapsed;
 
-    document.getElementById("label").textContent = "MANUAL BREAK";
-    document.getElementById("timer").textContent = `${m}:${s}`;
-    return;
+      const m = String(Math.floor(remaining / 60000)).padStart(2, "0");
+      const s = String(Math.floor((remaining % 60000) / 1000)).padStart(2, "0");
+
+      document.getElementById("label").textContent = "MANUAL BREAK";
+      document.getElementById("timer").textContent = `${m}:${s}`;
+      return;
+    } else {
+      endManualBreak();
+    }
   }
 
-  if (manualBreakEnd && now >= manualBreakEnd) {
-    manualBreakEnd = null;
-  }
+  // Apply accumulated break offset
+  const adjustedNow = new Date(now - accumulatedBreakTime);
 
   const totalMinutes = (eventEnd - eventStart) / 60000;
-  const elapsedMinutes = (now - eventStart) / 60000;
+  const elapsedMinutes = (adjustedNow - eventStart) / 60000;
 
   const activeLen = mode === "long" ? 54 : 25;
   const breakLen = mode === "long" ? 6 : 5;
-
   const cycleLen = activeLen + breakLen;
+
+  const cyclePosition = elapsedMinutes % cycleLen;
 
   let label;
   let remainingSeconds;
-
-  const cyclePosition = elapsedMinutes % cycleLen;
 
   if (cyclePosition < activeLen) {
     label = "ACTIVE";
