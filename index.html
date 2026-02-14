@@ -72,9 +72,9 @@ button.active {
 
 <!-- RIGHT -->
 <div id="rightControls">
+  <button id="endBreakBtn" style="display:none;">end</button>
   <button id="shortBtn">short</button>
   <button id="longBtn">long</button>
-  <button id="endBreakBtn" style="display:none;">end</button>
   <button id="displayToggleBtn">ON</button>
 </div>
 
@@ -131,6 +131,10 @@ document.getElementById("manualBtn").onclick = () => {
 
 // ------------------ SHORT / LONG BUTTONS ------------------
 
+document.getElementById("endBreakBtn").onclick = () => {
+  endManualBreak();
+};
+  
 document.getElementById("shortBtn").onclick = () => {
   if (systemMode === "automatic") {
     autoSplitMode = "short";
@@ -147,9 +151,6 @@ document.getElementById("longBtn").onclick = () => {
   }
 };
 
-document.getElementById("endBreakBtn").onclick = () => {
-  endManualBreak();
-};
 
 document.getElementById("displayToggleBtn").onclick = () => {
   displayOn = !displayOn;
