@@ -108,11 +108,12 @@ let stopwatchStart = new Date();
 
 // ------------------ MODE SWITCH ------------------
 
-document.getElementById("automaticBtn").click = () => {
+document.getElementById("automaticBtn").onclick = () => {
   systemMode = "automatic";
   document.getElementById("automaticBtn").classList.add("active");
   document.getElementById("manualBtn").classList.remove("active");
   document.getElementById("endBreakBtn").style.display = "none";
+  fetchActiveEvent(); // force refresh immediately
   updateVisibility();
 };
 
