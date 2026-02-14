@@ -15,8 +15,7 @@ body {
   color: #111;
 }
 
-/* TOP LEFT MODE CONTROLS */
-#modeControls {
+#leftControls {
   position: absolute;
   top: 12px;
   left: 16px;
@@ -24,8 +23,7 @@ body {
   opacity: 0.7;
 }
 
-/* TOP RIGHT CONTROLS */
-#controls {
+#rightControls {
   position: absolute;
   top: 12px;
   right: 16px;
@@ -66,18 +64,17 @@ button.active {
 </head>
 <body>
 
-<!-- TOP LEFT -->
-<div id="modeControls">
-  <button id="autoModeBtn" class="active">automatic</button>
-  <button id="manualModeBtn">manual</button>
-  <button id="endBreakBtn" style="display:none;">end</button>
+<!-- LEFT -->
+<div id="leftControls">
+  <button id="automaticBtn" class="active">automatic</button>
+  <button id="manualBtn">manual</button>
 </div>
 
-<!-- TOP RIGHT -->
-<div id="controls">
-  <button id="toggleBtn">ON</button>
+<!-- RIGHT -->
+<div id="rightControls">
   <button id="shortBtn">short</button>
   <button id="longBtn">long</button>
+  <button id="endBreakBtn" style="display:none;">end</button>
 </div>
 
 <div id="container">
@@ -98,51 +95,42 @@ const CALENDAR_IDS = [
 
 let eventStart = null;
 let eventEnd = null;
-let currentEventId = null;
-
-let isOn = true;
-let mode = "short";
 
 let systemMode = "automatic"; // automatic | manual
+let autoSplitMode = "short";
 
-// Manual system state
-let manualStartTime = null;
+// MANUAL MODE STATE
+let manualState = "idle"; // idle | break
 let manualBreakEnd = null;
+let stopwatchStart = new Date();
 
-// ------------------ MODE SWITCHING ------------------
+// ------------------ MODE SWITCH ------------------
 
-document.getElementById("autoModeBtn").onclick = () => {
+document.getElementById("automaticBtn").click = () => {
   systemMode = "automatic";
-  document.getElementById("autoModeBtn").classList.add("active");
-  document.getElementById("manualModeBtn").classList.remove("active");
+  document.getElementById("automaticBtn").classList.add("active");
+  document.getElementById("manualBtn").classList.remove("active");
   document.getElementById("endBreakBtn").style.display = "none";
-  resetManualSystem();
-};
-
-document.getElementById("manualModeBtn").onclick = () => {
-  systemMode = "manual";
-  document.getElementById("manualModeBtn").classList.add("active");
-  document.getElementById("autoModeBtn").classList.remove("active");
-  resetManualSystem();
-};
-
-function resetManualSystem() {
-  manualStartTime = new Date();
-  manualBreakEnd = null;
-}
-
-// ------------------ TOP RIGHT BUTTONS ------------------
-
-document.getElementById("toggleBtn").onclick = () => {
-  isOn = !isOn;
-  document.getElementById("toggleBtn").textContent = isOn ? "ON" : "OFF";
   updateVisibility();
 };
 
+document.getElementById("manualBtn").onclick = () => {
+  systemMode = "manual";
+  document.getElementById("manualBtn").classList.add("active");
+  document.getElementById("automaticBtn").classList.remove("active");
+
+  manualState = "idle";
+  stopwatchStart = new Date();
+  manualBreakEnd = null;
+
+  updateVisibility();
+};
+
+// ------------------ SHORT / LONG BUTTONS ------------------
+
 document.getElementById("shortBtn").onclick = () => {
   if (systemMode === "automatic") {
-    mode = "short";
-    updateModeButtons();
+    autoSplitMode = "short";
   } else {
     startManualBreak(5);
   }
@@ -150,28 +138,29 @@ document.getElementById("shortBtn").onclick = () => {
 
 document.getElementById("longBtn").onclick = () => {
   if (systemMode === "automatic") {
-    mode = "long";
-    updateModeButtons();
+    autoSplitMode = "long";
   } else {
     startManualBreak(10);
   }
 };
 
 document.getElementById("endBreakBtn").onclick = () => {
-  manualBreakEnd = null;
-  document.getElementById("endBreakBtn").style.display = "none";
+  endManualBreak();
 };
 
-function updateModeButtons() {
-  document.getElementById("shortBtn").classList.toggle("active", mode === "short");
-  document.getElementById("longBtn").classList.toggle("active", mode === "long");
-}
-
-// ------------------ MANUAL SYSTEM ------------------
+// ------------------ MANUAL BREAK ------------------
 
 function startManualBreak(minutes) {
+  manualState = "break";
   manualBreakEnd = new Date(Date.now() + minutes * 60000);
   document.getElementById("endBreakBtn").style.display = "inline";
+}
+
+function endManualBreak() {
+  manualState = "idle";
+  manualBreakEnd = null;
+  stopwatchStart = new Date(); // RESET stopwatch to 0
+  document.getElementById("endBreakBtn").style.display = "none";
 }
 
 // ------------------ FETCH EVENT (Automatic Only) ------------------
@@ -180,7 +169,7 @@ async function fetchActiveEvent() {
   if (systemMode !== "automatic") return;
 
   const now = new Date();
-  const timeMin = new Date(now.getTime() - 1 * 60 * 60 * 1000).toISOString();
+  const timeMin = new Date(now.getTime() - 60 * 60 * 1000).toISOString();
   const timeMax = new Date(now.getTime() + 12 * 60 * 60 * 1000).toISOString();
 
   let events = [];
@@ -191,9 +180,7 @@ async function fetchActiveEvent() {
       const res = await fetch(url);
       const data = await res.json();
       if (data.items) events = events.concat(data.items);
-    } catch (err) {
-      console.log("Calendar fetch error:", err);
-    }
+    } catch (err) {}
   }
 
   const nowTime = new Date();
@@ -217,14 +204,10 @@ async function fetchActiveEvent() {
 }
 
 function updateVisibility() {
-  if (!isOn) {
-    document.getElementById("container").style.display = "none";
-    return;
-  }
-
-  if (systemMode === "manual") {
-    document.getElementById("container").style.display = "block";
-  } else if (eventStart && eventEnd) {
+  if (systemMode === "automatic") {
+    document.getElementById("container").style.display =
+      eventStart && eventEnd ? "block" : "none";
+  } else {
     document.getElementById("container").style.display = "block";
   }
 }
@@ -232,53 +215,53 @@ function updateVisibility() {
 // ------------------ TIMER ------------------
 
 function updateTimer() {
-  if (!isOn) return;
 
-  const now = new Date();
-
-  // ===== MANUAL MODE =====
+  // -------- MANUAL MODE --------
   if (systemMode === "manual") {
 
-    if (!manualStartTime) manualStartTime = now;
-
-    if (manualBreakEnd && now < manualBreakEnd) {
+    if (manualState === "break") {
+      const now = new Date();
       const remaining = manualBreakEnd - now;
 
-      const m = String(Math.floor(remaining / 60000)).padStart(2,"0");
-      const s = String(Math.floor((remaining % 60000)/1000)).padStart(2,"0");
+      if (remaining <= 0) {
+        endManualBreak(); // auto-end + reset stopwatch
+        return;
+      }
 
-      document.getElementById("label").textContent = "MANUAL BREAK";
+      const m = String(Math.floor(remaining / 60000)).padStart(2, "0");
+      const s = String(Math.floor((remaining % 60000) / 1000)).padStart(2, "0");
+
+      document.getElementById("label").textContent = "BREAK";
       document.getElementById("timer").textContent = `${m}:${s}`;
       return;
     }
 
-    if (manualBreakEnd && now >= manualBreakEnd) {
-      manualBreakEnd = null;
-      document.getElementById("endBreakBtn").style.display = "none";
-    }
-
     // Stopwatch mode
-    const elapsed = now - manualStartTime;
-    const m = String(Math.floor(elapsed / 60000)).padStart(2,"0");
-    const s = String(Math.floor((elapsed % 60000)/1000)).padStart(2,"0");
+    const now = new Date();
+    const elapsed = now - stopwatchStart;
+
+    const m = String(Math.floor(elapsed / 60000)).padStart(2, "0");
+    const s = String(Math.floor((elapsed % 60000) / 1000)).padStart(2, "0");
 
     document.getElementById("label").textContent = "STOPWATCH";
     document.getElementById("timer").textContent = `${m}:${s}`;
     return;
   }
 
-  // ===== AUTOMATIC MODE =====
+  // -------- AUTOMATIC MODE --------
 
   if (!eventStart || !eventEnd) return;
+
+  const now = new Date();
   if (now < eventStart || now > eventEnd) return;
 
   const totalMinutes = (eventEnd - eventStart) / 60000;
   const elapsedMinutes = (now - eventStart) / 60000;
 
-  const activeLen = mode === "long" ? 54 : 25;
-  const breakLen = mode === "long" ? 6 : 5;
-  const cycleLen = activeLen + breakLen;
+  const activeLen = autoSplitMode === "long" ? 54 : 25;
+  const breakLen = autoSplitMode === "long" ? 6 : 5;
 
+  const cycleLen = activeLen + breakLen;
   const cyclePosition = elapsedMinutes % cycleLen;
 
   let label;
@@ -292,11 +275,13 @@ function updateTimer() {
     remainingSeconds = (cycleLen - cyclePosition) * 60;
   }
 
-  const m = String(Math.floor(remainingSeconds / 60)).padStart(2,"0");
-  const s = String(Math.floor(remainingSeconds % 60)).padStart(2,"0");
+  remainingSeconds = Math.max(0, remainingSeconds);
+
+  const m = String(Math.floor(remainingSeconds / 60)).padStart(2, "0");
+  const s = String(Math.floor(remainingSeconds % 60)).padStart(2, "0");
 
   document.getElementById("label").textContent =
-    label + " • " + (mode === "long" ? "LONG" : "SHORT");
+    label + " • " + autoSplitMode.toUpperCase();
 
   document.getElementById("timer").textContent = `${m}:${s}`;
 }
@@ -306,7 +291,6 @@ function updateTimer() {
 fetchActiveEvent();
 setInterval(fetchActiveEvent, 30000);
 setInterval(updateTimer, 1000);
-updateVisibility();
 </script>
 
 </body>
