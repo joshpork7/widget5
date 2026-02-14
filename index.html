@@ -256,7 +256,7 @@ function updateTimer() {
     const m = String(Math.floor(elapsed / 60000)).padStart(2, "0");
     const s = String(Math.floor((elapsed % 60000) / 1000)).padStart(2, "0");
 
-    document.getElementById("label").textContent = "STOPWATCH";
+    document.getElementById("label").textContent = "ACTIVE";
     document.getElementById("timer").textContent = `${m}:${s}`;
     return;
   }
