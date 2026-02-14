@@ -106,8 +106,7 @@ let mode = "short";
 
 // Manual break state
 let manualBreakStart = null;
-let manualBreakDuration = 0; // in ms
-let accumulatedBreakTime = 0; // total break offset applied
+let manualBreakDuration = 0;
 
 // ------------------ BREAK BUTTONS ------------------
 
@@ -124,10 +123,13 @@ function endManualBreak() {
   if (!manualBreakStart) return;
 
   const now = new Date();
-  const elapsed = now - manualBreakStart;
 
-  // Add only actual break time used
-  accumulatedBreakTime += Math.min(elapsed, manualBreakDuration);
+  // Calculate remaining event time
+  const remaining = eventEnd - now;
+
+  // Restart event from now
+  eventStart = new Date(now);
+  eventEnd = new Date(now.getTime() + remaining);
 
   manualBreakStart = null;
   manualBreakDuration = 0;
@@ -146,6 +148,7 @@ document.getElementById("manualLongBreak").onclick = () => {
 document.getElementById("endBreakBtn").onclick = () => {
   endManualBreak();
 };
+
 
 // ------------------ MODE BUTTONS ------------------
 
@@ -252,22 +255,24 @@ function updateTimer() {
   if (now < eventStart || now > eventEnd) return;
 
   // ----- ACTIVE MANUAL BREAK -----
-  if (manualBreakStart) {
-    const elapsed = now - manualBreakStart;
+if (manualBreakStart) {
+  const now = new Date();
+  const elapsed = now - manualBreakStart;
 
-    if (elapsed < manualBreakDuration) {
-      const remaining = manualBreakDuration - elapsed;
+  if (elapsed < manualBreakDuration) {
+    const remaining = manualBreakDuration - elapsed;
 
-      const m = String(Math.floor(remaining / 60000)).padStart(2, "0");
-      const s = String(Math.floor((remaining % 60000) / 1000)).padStart(2, "0");
+    const m = String(Math.floor(remaining / 60000)).padStart(2, "0");
+    const s = String(Math.floor((remaining % 60000) / 1000)).padStart(2, "0");
 
-      document.getElementById("label").textContent = "MANUAL BREAK";
-      document.getElementById("timer").textContent = `${m}:${s}`;
-      return;
-    } else {
-      endManualBreak();
-    }
+    document.getElementById("label").textContent = "MANUAL BREAK";
+    document.getElementById("timer").textContent = `${m}:${s}`;
+    return;
+  } else {
+    endManualBreak();
   }
+}
+
 
   // Apply accumulated break offset
   const adjustedNow = new Date(now - accumulatedBreakTime);
