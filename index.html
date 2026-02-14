@@ -269,26 +269,38 @@ function updateTimer() {
 
   const now = new Date();
   if (now < eventStart || now > eventEnd) return;
-
   const totalMinutes = (eventEnd - eventStart) / 60000;
   const elapsedMinutes = (now - eventStart) / 60000;
 
   const activeLen = autoSplitMode === "long" ? 54 : 25;
   const breakLen = autoSplitMode === "long" ? 6 : 5;
-
   const cycleLen = activeLen + breakLen;
-  const cyclePosition = elapsedMinutes % cycleLen;
+
+  const fullCycles = Math.floor(totalMinutes / cycleLen);
+  const timeUsedByFullCycles = fullCycles * cycleLen;
+  const remainder = totalMinutes - timeUsedByFullCycles;
 
   let label;
   let remainingSeconds;
 
-  if (cyclePosition < activeLen) {
+  if (elapsedMinutes >= timeUsedByFullCycles) {
+    // FINAL CYCLE (no break allowed)
+    const remainingFinal = totalMinutes - elapsedMinutes;
     label = "ACTIVE";
-    remainingSeconds = (activeLen - cyclePosition) * 60;
+    remainingSeconds = remainingFinal * 60;
   } else {
-    label = "BREAK";
-    remainingSeconds = (cycleLen - cyclePosition) * 60;
+    // Inside full cycles
+    const cyclePosition = elapsedMinutes % cycleLen;
+
+    if (cyclePosition < activeLen) {
+      label = "ACTIVE";
+      remainingSeconds = (activeLen - cyclePosition) * 60;
+    } else {
+      label = "BREAK";
+      remainingSeconds = (cycleLen - cyclePosition) * 60;
+    }
   }
+
 
   remainingSeconds = Math.max(0, remainingSeconds);
 
