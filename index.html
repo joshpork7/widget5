@@ -96,12 +96,12 @@ const CALENDAR_IDS = [
 
 let eventStart = null;
 let eventEnd = null;
-let displayOn = true;  
+let displayOn = true;
 
-let systemMode = "automatic"; // automatic | manual
+let systemMode = "automatic";
 let autoSplitMode = "short";
 
-// MANUAL MODE STATE
+// -------- MANUAL STATE --------
 let manualState = "idle"; // idle | break
 let manualBreakEnd = null;
 let stopwatchStart = new Date();
@@ -113,7 +113,7 @@ document.getElementById("automaticBtn").onclick = () => {
   document.getElementById("automaticBtn").classList.add("active");
   document.getElementById("manualBtn").classList.remove("active");
   document.getElementById("endBreakBtn").style.display = "none";
-  fetchActiveEvent(); // force refresh immediately
+  fetchActiveEvent();
   updateVisibility();
 };
 
@@ -129,12 +129,8 @@ document.getElementById("manualBtn").onclick = () => {
   updateVisibility();
 };
 
-// ------------------ SHORT / LONG BUTTONS ------------------
+// ------------------ SHORT / LONG ------------------
 
-document.getElementById("endBreakBtn").onclick = () => {
-  endManualBreak();
-};
-  
 document.getElementById("shortBtn").onclick = () => {
   if (systemMode === "automatic") {
     autoSplitMode = "short";
@@ -151,11 +147,15 @@ document.getElementById("longBtn").onclick = () => {
   }
 };
 
-
 document.getElementById("displayToggleBtn").onclick = () => {
   displayOn = !displayOn;
-  document.getElementById("displayToggleBtn").textContent = displayOn ? "ON" : "OFF";
+  document.getElementById("displayToggleBtn").textContent =
+    displayOn ? "ON" : "OFF";
   updateVisibility();
+};
+
+document.getElementById("endBreakBtn").onclick = () => {
+  endManualBreak();
 };
 
 // ------------------ MANUAL BREAK ------------------
@@ -169,11 +169,11 @@ function startManualBreak(minutes) {
 function endManualBreak() {
   manualState = "idle";
   manualBreakEnd = null;
-  stopwatchStart = new Date(); // RESET stopwatch to 0
+  stopwatchStart = new Date(); // reset stopwatch
   document.getElementById("endBreakBtn").style.display = "none";
 }
 
-// ------------------ FETCH EVENT (Automatic Only) ------------------
+// ------------------ FETCH EVENT ------------------
 
 async function fetchActiveEvent() {
   if (systemMode !== "automatic") return;
@@ -185,26 +185,34 @@ async function fetchActiveEvent() {
   let events = [];
 
   for (const id of CALENDAR_IDS) {
-    const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(id)}/events?key=${API_KEY}&timeMin=${timeMin}&timeMax=${timeMax}&singleEvents=true&orderBy=startTime`;
+    const url =
+      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(id)}/events` +
+      `?key=${API_KEY}&timeMin=${timeMin}&timeMax=${timeMax}` +
+      `&singleEvents=true&orderBy=startTime`;
+
     try {
       const res = await fetch(url);
       const data = await res.json();
       if (data.items) events = events.concat(data.items);
-    } catch (err) {}
+    } catch {}
   }
-
-  const nowTime = new Date();
 
   const active = events.find(e => {
     if (!e.start.dateTime || !e.end.dateTime) return false;
     const s = new Date(e.start.dateTime);
     const en = new Date(e.end.dateTime);
-    return s <= nowTime && nowTime <= en;
+    return now >= s && now <= en;
   });
 
   if (active) {
     eventStart = new Date(active.start.dateTime);
     eventEnd = new Date(active.end.dateTime);
+
+    const durationMinutes = (eventEnd - eventStart) / 60000;
+
+    // ✅ DEFAULT LONG IF ≥ 2 HOURS
+    autoSplitMode = durationMinutes >= 120 ? "long" : "short";
+
     updateVisibility();
   } else {
     eventStart = null;
@@ -231,15 +239,14 @@ function updateVisibility() {
 
 function updateTimer() {
 
-  // -------- MANUAL MODE --------
+  // -------- MANUAL --------
   if (systemMode === "manual") {
 
     if (manualState === "break") {
-      const now = new Date();
-      const remaining = manualBreakEnd - now;
+      const remaining = manualBreakEnd - new Date();
 
       if (remaining <= 0) {
-        endManualBreak(); // auto-end + reset stopwatch
+        endManualBreak();
         return;
       }
 
@@ -251,10 +258,7 @@ function updateTimer() {
       return;
     }
 
-    // Stopwatch mode
-    const now = new Date();
-    const elapsed = now - stopwatchStart;
-
+    const elapsed = new Date() - stopwatchStart;
     const m = String(Math.floor(elapsed / 60000)).padStart(2, "0");
     const s = String(Math.floor((elapsed % 60000) / 1000)).padStart(2, "0");
 
@@ -263,44 +267,52 @@ function updateTimer() {
     return;
   }
 
-  // -------- AUTOMATIC MODE --------
+  // -------- AUTOMATIC --------
 
   if (!eventStart || !eventEnd) return;
 
   const now = new Date();
   if (now < eventStart || now > eventEnd) return;
-  const totalMinutes = (eventEnd - eventStart) / 60000;
-  const elapsedMinutes = (now - eventStart) / 60000;
 
-  const activeLen = autoSplitMode === "long" ? 54 : 25;
-  const breakLen = autoSplitMode === "long" ? 6 : 5;
-  const cycleLen = activeLen + breakLen;
+const totalMinutes = (eventEnd - eventStart) / 60000;
+const elapsedMinutes = (now - eventStart) / 60000;
 
-  const fullCycles = Math.floor(totalMinutes / cycleLen);
-  const timeUsedByFullCycles = fullCycles * cycleLen;
-  const remainder = totalMinutes - timeUsedByFullCycles;
+const blockSize = autoSplitMode === "long" ? 60 : 30;
+const activeLen = autoSplitMode === "long" ? 54 : 25;
+const breakLen = autoSplitMode === "long" ? 6 : 5;
 
-  let label;
-  let remainingSeconds;
+// How many full blocks fit
+const fullBlocks = Math.floor(totalMinutes / blockSize);
+const remainder = totalMinutes - (fullBlocks * blockSize);
 
-  if (elapsedMinutes >= timeUsedByFullCycles) {
-    // FINAL CYCLE (no break allowed)
-    const remainingFinal = totalMinutes - elapsedMinutes;
+// Last active length = full block + remainder
+const finalActiveLength = blockSize + remainder;
+
+let label;
+let remainingSeconds;
+
+// Total time occupied by all full structured blocks except last
+const structuredTime = (fullBlocks - 1) * blockSize;
+
+if (elapsedMinutes >= structuredTime) {
+
+  // We are inside the FINAL BLOCK (no break inside it)
+  label = "ACTIVE";
+  remainingSeconds = (totalMinutes - elapsedMinutes) * 60;
+
+} else {
+
+  // We are inside structured blocks
+  const blockPosition = elapsedMinutes % blockSize;
+
+  if (blockPosition < activeLen) {
     label = "ACTIVE";
-    remainingSeconds = remainingFinal * 60;
+    remainingSeconds = (activeLen - blockPosition) * 60;
   } else {
-    // Inside full cycles
-    const cyclePosition = elapsedMinutes % cycleLen;
-
-    if (cyclePosition < activeLen) {
-      label = "ACTIVE";
-      remainingSeconds = (activeLen - cyclePosition) * 60;
-    } else {
-      label = "BREAK";
-      remainingSeconds = (cycleLen - cyclePosition) * 60;
-    }
+    label = "BREAK";
+    remainingSeconds = (blockSize - blockPosition) * 60;
   }
-
+}
 
   remainingSeconds = Math.max(0, remainingSeconds);
 
